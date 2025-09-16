@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Online Banking System — Demo (Observer / Strategy / Command)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    /* ====== Simple responsive styling ====== */
+    :root{
+      --bg:#0f1724; --card:#0b1220; --accent:#00a3ff; --muted:#9aa7b2;
+      --glass: rgba(255,255,255,0.03);
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    body{
+      margin:0; background:linear-gradient(180deg,#071021 0%, #07161f 100%); color:#e6f0f6;
+      min-height:100vh; padding:24px;
+    }
+    header{display:flex;gap:16px;align-items:center;margin-bottom:18px;}
+    header h1{font-size:20px;margin:0}
+    .container{display:grid;grid-template-columns:360px 1fr; gap:18px;align-items:start;}
+    .card{background:var(--card); padding:14px;border-radius:12px; box-shadow:0 6px 18px rgba(2,6,23,0.6);}
+    .small{font-size:13px;color:var(--muted)}
+    label{display:block;font-size:13px;margin-top:8px;color:var(--muted)}
+    input, select{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:var(--glass);color:inherit}
+    button{background:var(--accent);border:none;color:#032; padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:600}
+    .muted{color:var(--muted)}
+    .accounts-list{max-height:360px;overflow:auto;margin-top:10px}
+    .account-item{padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.02);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+    .actions{display:flex;gap:8px;flex-wrap:wrap}
+    .main-grid{display:grid;grid-template-columns:1fr 420px; gap:18px}
+    .transactions{max-height:320px;overflow:auto;margin-top:10px}
+    .tx{padding:8px;border-radius:8px;background:rgba(255,255,255,0.02);margin-bottom:8px;font-size:13px}
+    .notifs{max-height:220px;overflow:auto;padding:8px;border-radius:8px;background:rgba(255,255,255,0.02)}
+    .controls{display:flex;gap:8px;align-items:center;margin-top:8px}
+    footer{margin-top:18px;color:var(--muted);font-size:13px}
+    @media (max-width:900px){
+      .container{grid-template-columns:1fr}
+      .main-grid{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Online Banking System — Demo</h1>
+    <div class="small muted">Observer · Strategy · Command patterns — front-end simulation</div>
+  </header>
+
+  <div class="container">
+    <!-- Left: controls & accounts -->
+    <div class="card">
+      <h3>Accounts</h3>
+      <div class="small muted">Create accounts, subscribe to notifications, choose interest strategy</div>
+
+      <label>Customer name</label>
+      <input id="inpName" placeholder="e.g., Alice" />
+
+      <label>Initial balance (₹)</label>
+      <input id="inpBalance" placeholder="10000" type="number" />
+
+      <label>Account type</label>
+      <select id="inpType">
+        <option value="savings">Savings</option>
+        <option value="current">Current</option>
+        <option value="fd">Fixed Deposit</option>
+      </select>
+
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button id="btnCreate">Create Account</button>
+        <button id="btnCreateSample">Create Sample A/B</button>
+      </div>
+
+      <div style="margin-top:12px;">
+        <label>Accounts list</label>
+        <div class="accounts-list" id="accountsList"></div>
+      </div>
+
+      <hr style="border-color:rgba(255,255,255,0.03);margin:12px 0" />
+
+      <div>
+        <h4 class="small">Notifications</h4>
+        <div class="small muted">Subscribe/unsubscribe to account updates</div>
+        <div style="margin-top:8px;">
+          <label>Subscriber name</label>
+          <input id="subscriberName" placeholder="e.g., Bob" />
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <button id="btnSubscribe">Subscribe</button>
+            <button id="btnUnsubscribe">Unsubscribe</button>
+          </div>
+          <div style="margin-top:8px" class="small muted">Active subscribers will receive updates in Notifications panel.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: main area -->
+    <div>
+      <div class="card main-grid">
+        <div>
+          <h3>Selected Account</h3>
+          <div id="selectedBox" class="small muted">No account selected — create or pick one.</div>
+
+          <div style="margin-top:10px;">
+            <label>Action</label>
+            <select id="actionType">
+              <option value="deposit">Deposit</option>
+              <option value="withdraw">Withdraw</option>
+              <option value="transfer">Transfer</option>
+              <option value="applyInterest">Apply Interest</option>
+            </select>
+
+            <label>Amount (₹)</label>
+            <input id="actionAmount" type="number" placeholder="500" />
+
+            <label>Transfer To (for transfer)</label>
+            <select id="transferTo">
+              <option value="">-- select target account --</option>
+            </select>
+
+            <div class="controls">
+              <button id="btnDoAction">Execute</button>
+              <button id="btnUndo">Undo</button>
+              <button id="btnRedo">Redo</button>
+              <button id="btnClearNotifs">Clear Notifications</button>
+            </div>
+          </div>
+
+          <h4 style="margin-top:12px">Transactions</h4>
+          <div class="transactions" id="txList"></div>
+
+        </div>
+
+        <div>
+          <h3>Notifications & Account Tools</h3>
+          <div class="notifs" id="notifPanel">
+            <div class="muted">No notifications yet.</div>
+          </div>
+
+          <h4 style="margin-top:12px">Interest Strategy</h4>
+          <div class="small muted">Switch strategy used when applying interest to the selected account</div>
+          <select id="interestStrategy">
+            <option value="savings">Savings Interest</option>
+            <option value="current">Current Account Interest</option>
+            <option value="fd">Fixed Deposit Interest</option>
+          </select>
+          <div style="margin-top:8px;">
+            <button id="btnApplyStrategy">Set strategy</button>
+          </div>
+
+          <h4 style="margin-top:12px">Account Details</h4>
+          <div id="accDetails" class="small muted">Select an account to view details.</div>
+
+          <h4 style="margin-top:12px">Undo/Redo stacks</h4>
+          <div class="small muted" id="stackInfo">Undo: 0  |  Redo: 0</div>
+
+        </div>
+      </div>
+
+      <footer class="card" style="margin-top:12px;">
+        <div><strong>How this demo maps to the assignment:</strong> Observer = notifications for account changes; Strategy = interest calculators; Command = transactions with undo/redo. This file is a simulation only (front-end). See code comments for implementation details.</div>
+      </footer>
+    </div>
+  </div>
+
+  <script>
+  /************************************************************************
+   * Simple front-end banking demo implementing:
+   * - Observer pattern (Account notifies subscribers)
+   * - Strategy pattern (Interest calculation strategies)
+   * - Command pattern (Deposit, Withdraw, Transfer) with undo/redo
+   *
+   * This is a single-file educational simulation — no backend or security.
+   ************************************************************************/
+
+  // ------------------------------
+  // Utilities
+  // ------------------------------
+  const $ = (id) => document.getElementById(id);
+  const format = (n) => Number(n).toLocaleString('en-IN', {maximumFractionDigits:2});
+
+  // ------------------------------
+  // Observer: Subscriber/Notification system
+  // ------------------------------
+  class Subscriber {
+    constructor(name, onNotify){
+      this.name = name;
+      this.onNotify = onNotify || ((msg)=>console.log(`[${this.name}] ${msg}`));
+    }
+  }
+
+  // ------------------------------
+  // Strategy: interest calculation
+  // ------------------------------
+  class InterestStrategy {
+    calculate(balance){
+      return 0;
+    }
+  }
+  class SavingsInterest extends InterestStrategy {
+    calculate(balance){ return balance * 0.03; } // 3%
+  }
+  class CurrentInterest extends InterestStrategy {
+    calculate(balance){ return balance * 0.01; } // 1%
+  }
+  class FDInterest extends InterestStrategy {
+    calculate(balance){ return balance * 0.06; } // 6%
+  }
+
+  const StrategyFactory = {
+    create(name){
+      if(name==='savings') return new SavingsInterest();
+      if(name==='current') return new CurrentInterest();
+      if(name==='fd') return new FDInterest();
+      return new SavingsInterest();
+    }
+  }
+
+  // ------------------------------
+  // Account (Subject) — encapsulates balance and observers
+  // ------------------------------
+  let nextAccountId = 1;
+  class Account {
+    constructor(owner, type='savings', balance=0){
+      this.id = 'A' + (nextAccountId++);
+      this.owner = owner;
+      this.type = type;
+      this.balance = Number(balance) || 0;
+      this.subscribers = [];
+      this.interestStrategy = StrategyFactory.create(type);
+      this.txHistory = [];
+    }
+    subscribe(sub){
+      if(!this.subscribers.includes(sub)){
+        this.subscribers.push(sub);
+      }
+    }
+    unsubscribe(subName){
+      this.subscribers = this.subscribers.filter(s=>s.name !== subName);
+    }
+    notify(message){
+      this.subscribers.forEach(s => s.onNotify(`[${this.id}] ${message}`));
+      // also send to UI notifications
+      pushUINotif(`[${this.owner} / ${this.id}]: ${message}`);
+    }
+    deposit(amount){
+      amount = Number(amount);
+      if(amount<=0) throw new Error("Amount must be positive");
+      this.balance += amount;
+      this.txHistory.push({type:'deposit', amount, date: new Date()});
+      this.notify(`Deposit ₹${amount} — new balance ₹${format(this.balance)}`);
+    }
+    withdraw(amount){
+      amount = Number(amount);
+      if(amount<=0) throw new Error("Amount must be positive");
+      if(amount > this.balance) throw new Error("Insufficient balance");
+      this.balance -= amount;
+      this.txHistory.push({type:'withdraw', amount, date: new Date()});
+      this.notify(`Withdraw ₹${amount} — new balance ₹${format(this.balance)}`);
+    }
+    transferTo(targetAccount, amount){
+      amount = Number(amount);
+      if(amount<=0) throw new Error("Amount must be positive");
+      if(amount > this.balance) throw new Error("Insufficient balance");
+      this.balance -= amount;
+      targetAccount.balance += amount;
+      this.txHistory.push({type:'transferOut', to:targetAccount.id, amount, date:new Date()});
+      targetAccount.txHistory.push({type:'transferIn', from:this.id, amount, date:new Date()});
+      this.notify(`Transfer ₹${amount} to ${targetAccount.id} — new balance ₹${format(this.balance)}`);
+      targetAccount.notify(`Received ₹${amount} from ${this.id} — new balance ₹${format(targetAccount.balance)}`);
+    }
+    setInterestStrategy(strategy){
+      this.interestStrategy = strategy;
+      this.notify(`Interest strategy set to ${strategy.constructor.name}`);
+    }
+    applyInterest(){
+      const interest = this.interestStrategy.calculate(this.balance);
+      if(interest !== 0){
+        this.balance += interest;
+        this.txHistory.push({type:'interest', amount:interest, date:new Date()});
+        this.notify(`Interest ₹${format(interest)} applied — new balance ₹${format(this.balance)}`);
+        return interest;
+      }
+      return 0;
+    }
+  }
+
+  // ------------------------------
+  // Command Pattern
+  // ------------------------------
+  class Command {
+    execute(){}
+    undo(){}
+  }
+
+  class DepositCommand extends Command {
+    constructor(account, amount){
+      super();
+      this.account = account; this.amount = Number(amount);
+    }
+    execute(){ this.account.deposit(this.amount); }
+    undo(){ // undo deposit => withdraw
+      try { this.account.withdraw(this.amount); }
+      catch(e){ console.warn("Undo deposit failed:", e.message); }
+    }
+    toString(){ return `Deposit ₹${this.amount} -> ${this.account.id}`; }
+  }
+
+  class WithdrawCommand extends Command {
+    constructor(account, amount){
+      super();
+      this.account = account; this.amount = Number(amount);
+    }
+    execute(){ this.account.withdraw(this.amount); }
+    undo(){ this.account.deposit(this.amount); }
+    toString(){ return `Withdraw ₹${this.amount} <- ${this.account.id}`; }
+  }
+
+  class TransferCommand extends Command {
+    constructor(fromAcc, toAcc, amount){
+      super();
+      this.fromAcc = fromAcc; this.toAcc = toAcc; this.amount = Number(amount);
+    }
+    execute(){ this.fromAcc.transferTo(this.toAcc, this.amount); }
+    undo(){ // reverse transfer
+      // ensure fromAcc has enough to revert; if not, top up from toAcc
+      if(this.toAcc.balance < this.amount){
+        throw new Error("Cannot undo transfer: target has insufficient funds");
+      }
+      this.toAcc.transferTo(this.fromAcc, this.amount);
+    }
+    toString(){ return `Transfer ₹${this.amount} ${this.fromAcc.id} -> ${this.toAcc.id}`; }
+  }
+
+  // Command manager with undo/redo
+  const CommandManager = {
+    undoStack: [],
+    redoStack: [],
+    execute(cmd){
+      try{
+        cmd.execute();
+        this.undoStack.push(cmd);
+        this.redoStack = [];
+        renderStacks();
+        appendTxUI(cmd);
+      }catch(e){
+        pushUINotif('Error: ' + e.message);
+        console.error(e);
+      }
+    },
+    undo(){
+      const cmd = this.undoStack.pop();
+      if(!cmd) return;
+      try{
+        cmd.undo();
+        this.redoStack.push(cmd);
+        renderStacks();
+        pushUINotif(`Undo: ${cmd.toString()}`);
+      }catch(e){
+        pushUINotif('Undo failed: ' + e.message);
+        console.error(e);
+      }
+    },
+    redo(){
+      const cmd = this.redoStack.pop();
+      if(!cmd) return;
+      try{
+        cmd.execute();
+        this.undoStack.push(cmd);
+        renderStacks();
+        pushUINotif(`Redo: ${cmd.toString()}`);
+      }catch(e){
+        pushUINotif('Redo failed: ' + e.message);
+        console.error(e);
+      }
+    }
+  };
+
+  // ------------------------------
+  // UI state
+  // ------------------------------
+  const state = {
+    accounts: [],
+    subscribers: {}, // name -> Subscriber
+    selectedAccountId: null
+  };
+
+  // ------------------------------
+  // UI helpers
+  // ------------------------------
+  function pushUINotif(msg){
+    const panel = $('notifPanel');
+    const p = document.createElement('div');
+    p.className='tx';
+    p.textContent = `${(new Date()).toLocaleTimeString()} — ${msg}`;
+    panel.prepend(p);
+  }
+
+  function appendTxUI(cmd){
+    const el = $('txList');
+    const div = document.createElement('div');
+    div.className='tx';
+    div.textContent = `${(new Date()).toLocaleTimeString()} • ${cmd.toString()}`;
+    el.prepend(div);
+  }
+
+  function renderAccounts(){
+    const list = $('accountsList'); list.innerHTML='';
+    const transferTo = $('transferTo'); transferTo.innerHTML = '<option value="">-- select target account --</option>';
+    state.accounts.forEach(acc=>{
+      const item = document.createElement('div');
+      item.className='account-item';
+      item.innerHTML = `<div>
+          <div><strong>${acc.owner}</strong> <span class="muted">(${acc.id})</span></div>
+          <div class="small muted">${acc.type} · Balance: ₹${format(acc.balance)}</div>
+        </div>
+        <div class="actions">
+          <button onclick="selectAccount('${acc.id}')">Select</button>
+          <button onclick="subscribeUI('${acc.id}')">Subscribe</button>
+          <button onclick="unsubscribeUI('${acc.id}')">Unsubscribe</button>
+        </div>`;
+      list.appendChild(item);
+      const opt = document.createElement('option'); opt.value = acc.id; opt.text = `${acc.owner} (${acc.id})`;
+      transferTo.appendChild(opt);
+    });
+    renderSelected();
+  }
+
+  function renderSelected(){
+    const box = $('selectedBox');
+    const details = $('accDetails');
+    const sel = state.accounts.find(a=>a.id===state.selectedAccountId);
+    if(!sel){
+      box.textContent = "No account selected — create or pick one.";
+      details.innerHTML = "Select an account to view details.";
+      return;
+    }
+    box.innerHTML = `<strong>${sel.owner}</strong> · <span class="muted">${sel.id}</span> · Balance: ₹${format(sel.balance)}`;
+    details.innerHTML = `
+      <div class="small">Type: ${sel.type}</div>
+      <div class="small">Strategy: ${sel.interestStrategy.constructor.name}</div>
+      <div class="small">Subscribers: ${sel.subscribers.map(s=>s.name).join(', ') || '(none)'}</div>
+      <div style="margin-top:8px" class="small muted">Tx History (most recent 5):</div>
+      <div>${sel.txHistory.slice(-5).reverse().map(tx=>`<div class="tx">${tx.date.toLocaleString()} • ${tx.type} ₹${format(tx.amount||0)} ${tx.to? 'to ' + tx.to : ''} ${tx.from? 'from ' + tx.from : ''}</div>`).join('')}</div>
+    `;
+  }
+
+  function renderStacks(){
+    $('stackInfo').textContent = `Undo: ${CommandManager.undoStack.length}  |  Redo: ${CommandManager.redoStack.length}`;
+  }
+
+  // ------------------------------
+  // UI action handlers (exposed to inline onclick)
+  // ------------------------------
+  window.selectAccount = function(id){
+    state.selectedAccountId = id;
+    renderAccounts();
+  }
+
+  window.subscribeUI = function(accId){
+    const acc = state.accounts.find(a=>a.id===accId);
+    if(!acc) return;
+    const subName = $('subscriberName').value.trim();
+    if(!subName){ pushUINotif('Enter subscriber name before subscribing'); return; }
+    let s = state.subscribers[subName];
+    if(!s){
+      s = new Subscriber(subName, (msg)=>{ pushUINotif(`[to ${subName}] ${msg}`); });
+      state.subscribers[subName] = s;
+    }
+    acc.subscribe(s);
+    pushUINotif(`${subName} subscribed to ${acc.id}`);
+    renderSelected();
+  }
+
+  window.unsubscribeUI = function(accId){
+    const acc = state.accounts.find(a=>a.id===accId);
+    if(!acc) return;
+    const subName = $('subscriberName').value.trim();
+    if(!subName){ pushUINotif('Enter subscriber name to unsubscribe'); return; }
+    acc.unsubscribe(subName);
+    pushUINotif(`${subName} unsubscribed from ${acc.id}`);
+    renderSelected();
+  }
+
+  // ------------------------------
+  // Wire up DOM controls
+  // ------------------------------
+  $('btnCreate').addEventListener('click', ()=> {
+    const owner = $('inpName').value.trim() || `User${Math.floor(Math.random()*900+100)}`;
+    const balance = Number($('inpBalance').value || 0);
+    const type = $('inpType').value;
+    const acc = new Account(owner, type, balance);
+    state.accounts.push(acc);
+    pushUINotif(`Account created: ${acc.id} (${owner})`);
+    renderAccounts();
+    $('inpName').value=''; $('inpBalance').value='';
+  });
+
+  $('btnCreateSample').addEventListener('click', ()=>{
+    const a = new Account('Alice','savings',10000);
+    const b = new Account('Bob','current',4000);
+    state.accounts.push(a,b);
+    pushUINotif('Sample accounts: Alice (A) and Bob (B) created');
+    renderAccounts();
+  });
+
+  $('btnSubscribe').addEventListener('click', ()=>{
+    const subName = $('subscriberName').value.trim();
+    if(!subName){ pushUINotif('Enter subscriber name'); return; }
+    // subscribe to all accounts for demo convenience
+    let s = state.subscribers[subName];
+    if(!s) s = new Subscriber(subName, (msg)=>{ pushUINotif(`[to ${subName}] ${msg}`); state.subscribers[subName]=s; });
+    state.accounts.forEach(acc=>acc.subscribe(s));
+    pushUINotif(`${subName} subscribed to all accounts`);
+    renderSelected();
+  });
+
+  $('btnUnsubscribe').addEventListener('click', ()=>{
+    const subName = $('subscriberName').value.trim();
+    if(!subName){ pushUINotif('Enter subscriber name'); return; }
+    state.accounts.forEach(acc=>acc.unsubscribe(subName));
+    pushUINotif(`${subName} unsubscribed from all accounts`);
+    delete state.subscribers[subName];
+    renderSelected();
+  });
+
+  $('btnDoAction').addEventListener('click', ()=>{
+    const action = $('actionType').value;
+    const amt = Number($('actionAmount').value || 0);
+    const sel = state.accounts.find(a=>a.id===state.selectedAccountId);
+    if(action==='applyInterest'){
+      if(!sel){ pushUINotif('Select an account first'); return; }
+      const cmd = { execute: ()=> { sel.applyInterest(); }, toString: ()=>`ApplyInterest -> ${sel.id}` };
+      CommandManager.execute(cmd);
+      renderSelected();
+      return;
+    }
+    if(!sel){ pushUINotif('Select an account first'); return; }
+    try{
+      if(action==='deposit'){
+        const cmd = new DepositCommand(sel, amt);
+        CommandManager.execute(cmd);
+      } else if(action==='withdraw'){
+        const cmd = new WithdrawCommand(sel, amt);
+        CommandManager.execute(cmd);
+      } else if(action==='transfer'){
+        const toId = $('transferTo').value;
+        if(!toId) { pushUINotif('Pick target account'); return; }
+        const toAcc = state.accounts.find(a=>a.id===toId);
+        const cmd = new TransferCommand(sel, toAcc, amt);
+        CommandManager.execute(cmd);
+      }
+      renderSelected();
+      renderAccounts();
+    }catch(e){
+      pushUINotif('Action failed: ' + e.message);
+    }
+  });
+
+  $('btnUndo').addEventListener('click', ()=>{ CommandManager.undo(); renderAccounts(); renderSelected(); });
+  $('btnRedo').addEventListener('click', ()=>{ CommandManager.redo(); renderAccounts(); renderSelected(); });
+
+  $('btnClearNotifs').addEventListener('click', ()=>{ $('notifPanel').innerHTML = '<div class="muted">No notifications yet.</div>'; });
+
+  $('btnApplyStrategy').addEventListener('click', ()=>{
+    const stratName = $('interestStrategy').value;
+    const sel = state.accounts.find(a=>a.id===state.selectedAccountId);
+    if(!sel){ pushUINotif('Select account to set strategy'); return; }
+    sel.setInterestStrategy( StrategyFactory.create(stratName) );
+    renderSelected();
+  });
+
+  // Init small demo
+  (function init(){
+    const a = new Account('System', 'savings', 5000);
+    state.accounts.push(a);
+    renderAccounts();
+    pushUINotif('Demo ready — create accounts or use "Create Sample A/B"');
+  })();
+
+  </script>
+</body>
+</html>
